@@ -1,7 +1,7 @@
 require 'colorize'
 
 module Codeable
-  COLORS = ['red', 'yellow', 'green', 'blue', 'magenta', 'black']
+  COLORS = %w[red yellow green blue magenta black]
 
   def random_color
     COLORS[rand(0..5)]
@@ -16,6 +16,9 @@ module Codeable
 end
 
 class GameBoard
+  include Codeable
+  attr_reader :guesses
+
   def initialize(game)
     @guesses = []
     @game = game
@@ -54,21 +57,56 @@ end
 class Game
   include Codeable
 
-  def setup
-    @game_board = GameBoard.new(self)
-    @code_maker = ComputerPlayer.new(@game_board)
-    @code_breaker = HumanPlayer.new(@game_board)
-    @code = @code_maker.generate_code
+  def initialize
+    @turn = 1
   end
 
-  def play
+  def setup
+    @game_board = GameBoard.new(self)
+
+    if prompt_maker_or_breaker == 'BREAKER'
+      @code_maker = ComputerPlayer.new(@game_board, self)
+      @code_breaker = HumanPlayer.new(@game_board, self)
+      @code = @code_maker.generate_code
+      play_human_breaker
+    else
+      @code_maker = HumanPlayer.new(@game_board, self)
+      @code_breaker = ComputerPlayer.new(@game_board, self)
+      @code = prompt_code
+      play_computer_breaker
+    end
+  end
+
+  def play_human_breaker
     guess = @code_breaker.guess(prompt_guess)
     @game_board.show
 
     if win?(guess)
       puts 'You won!'
+    elsif @turn > 12
+      puts 'Game over, 12 guesses!'
     else
-      play
+      @turn += 1
+      play_human_breaker
+    end
+  end
+
+  def play_computer_breaker
+    guess = @code_breaker.guess
+    print 'The computer guessed '
+    guess.each { |color| print "#{color.send(color)} " }
+    print "\n"
+    @game_board.show
+    @code_breaker.log_evaluation(evaluate(guess), guess)
+
+    if win?(guess)
+      puts 'The computer wins!'
+    elsif @turn > 12
+      puts 'Game over, 12 guesses!'
+    else
+      sleep(1)
+      @turn += 1
+      play_computer_breaker
     end
   end
 
@@ -78,16 +116,16 @@ class Game
     gets.chomp
   end
 
-  def evaluate(guess)
+  def evaluate(guess, code = @code)
     evaluation = []
     code_non_perfect_colors = []
     guess_non_perfect_colors = []
 
     guess.each_with_index do |color, i|
-      if @code[i] == color
+      if code[i] == color
         evaluation.push('perfect')
       else
-        code_non_perfect_colors.push(@code[i])
+        code_non_perfect_colors.push(code[i])
         guess_non_perfect_colors.push(color)
       end
     end
@@ -107,11 +145,28 @@ class Game
     evaluation = evaluate(guess)
     evaluation.length == 4 && evaluation.all?('perfect')
   end
+
+  def prompt_maker_or_breaker
+    puts 'Would you like to be the code MAKER or code BREAKER?'
+    maker_or_breaker = gets.chomp.upcase
+    unless %w[MAKER BREAKER].include?(maker_or_breaker)
+      puts 'Please type "MAKER" or "BREAKER"'
+      return prompt_maker_or_breaker
+    end
+    maker_or_breaker
+  end
+
+  def prompt_code
+    puts 'Please enter a four-color code using the following six colors:'
+    print_all_colors
+    gets.chomp.split
+  end
 end
 
 class Player
-  def initialize(game_board)
+  def initialize(game_board, game)
     @game_board = game_board
+    @game = game
   end
 end
 
@@ -126,13 +181,30 @@ end
 class ComputerPlayer < Player
   include Codeable
 
+  def initialize(game_board, game)
+    super(game_board, game)
+    @possible_codes = []
+    COLORS.repeated_permutation(4) { |permutation| @possible_codes.push(permutation) }
+  end
+
   def generate_code
     code = []
     4.times { code.push(random_color) }
     code
   end
+
+  def guess
+    code = @possible_codes.sample
+    @game_board.add_code(code)
+    code
+  end
+
+  def log_evaluation(evaluation, guess)
+    @possible_codes.select! do |code|
+      @game.evaluate(code, guess) == evaluation
+    end
+  end
 end
 
 game = Game.new
 game.setup
-game.play
