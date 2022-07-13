@@ -168,7 +168,7 @@ class GameMessage
     puts 'You will either make or guess a four-color code.'
     puts 'With each guess, you will see up to four dots to the right of the board.'
     puts "A #{'red'.red} dot means a color is in the correct position,"
-    puts "and a #{'white'.on_white} dot means that a color exists in the code but is in the incorrect position."
+    puts "and a #{'white'.black.on_white} dot means that a color exists in the code but is in the incorrect position."
   end
 
   def prompt_maker_or_breaker
